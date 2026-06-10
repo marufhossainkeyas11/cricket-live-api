@@ -51,7 +51,8 @@ async function handlePost(req, res) {
   const listKey  = 'active_matches';
 
   // Rate limit
-  if (await kv.get(rateKey))
+  const isForce = req.body.force === true;
+  if (!isForce && await kv.get(rateKey))
     return res.status(429).json({ error: 'Too fast — wait 2s' });
 
   // Token ownership
