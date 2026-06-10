@@ -1,0 +1,13 @@
+{
+  "rewrites": [
+    { "source": "/viewer", "destination": "/viewer.html" }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" }
+      ]
+    }
+  ]
+}
