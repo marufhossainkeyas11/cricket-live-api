@@ -306,7 +306,6 @@ function renderList(matches) {
 function startConnect(pw) {
   if (pw !== undefined && pw !== null) enteredPw = pw;
   if (es) es.close();
-  const url = `${API}/api/live?matchId=...${enteredPw ? '&password=...' : ''}`;
   const url = `${API}/api/live?matchId=${encodeURIComponent(matchId)}${enteredPw ? '&password=' + encodeURIComponent(enteredPw) : ''}`;
   es = new EventSource(url);
 
