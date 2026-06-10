@@ -1,65 +1,69 @@
 /**
- * GET /api/matches — সব active matches এর list
- * Viewer landing page এ দেখাবে
+ * GET /api/live?matchId=xxx&password=yyy
+ * SSE — real-time push to viewers
  */
 
 import { Redis } from '@upstash/redis';
+
 const kv = new Redis({
-  url: process.env.LIVECS_KV_REST_API_URL,
+  url:   process.env.LIVECS_KV_REST_API_URL,
   token: process.env.LIVECS_KV_REST_API_TOKEN,
 });
 
-function cors(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  return res;
-}
+export const config = { maxDuration: 25 };
 
 export default async function handler(req, res) {
-  cors(res);
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'GET') return res.status(405).end();
+  res.setHeader('Access-Control-Allow-Origin', '*');
 
-  try {
-    const activeIds = (await kv.get('active_matches')) || [];
-    if (!activeIds.length) {
-      return res.status(200).json({ matches: [] });
+  const matchId  = req.query.matchId || req.query.match;
+  const password = req.query.password || '';
+  if (!matchId) return res.status(400).end();
+
+  // SSE headers
+  res.setHeader('Content-Type',  'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection',    'keep-alive');
+  res.flushHeaders();
+
+  const send = d => res.write(`data: ${JSON.stringify(d)}\n\n`);
+
+  // Initial data
+  const raw = await kv.get(`match:${matchId}`);
+  if (!raw) { send({ error: 'not_found' }); return res.end(); }
+
+  const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
+
+  // Password check
+  if (data.hasPassword) {
+    const stored = await kv.get(`pass:${matchId}`);
+    if (stored && stored !== password) {
+      send({ error: 'password_required' });
+      return res.end();
     }
-
-    // সব match এর basic info এক সাথে fetch (pipeline)
-    const pipeline = kv.pipeline();
-    activeIds.forEach(id => pipeline.get(`match:${id}`));
-    const results = await pipeline.exec();
-
-    const matches = [];
-    activeIds.forEach((id, i) => {
-      const d = results[i];
-      if (!d || !d.setup) return; // expired বা invalid
-
-      const m = d.match;
-      const s = d.setup;
-      matches.push({
-        matchId:     id,
-        teamA:       s.teamA || s.team1 || '?',
-        teamB:       s.teamB || s.team2 || '?',
-        overs:       s.overs,
-        innings:     m?.innings || 1,
-        score:       m ? `${m.runs}/${m.wickets}` : '0/0',
-        balls:       m?.balls || 0,
-        done:        m?.done || false,
-        screen:      d.screen || 'scoring',
-        updatedAt:   d.updatedAt,
-      });
-    });
-
-    // সর্বশেষ আপডেট হওয়া আগে দেখাও
-    matches.sort((a, b) => b.updatedAt - a.updatedAt);
-
-    res.setHeader('Cache-Control', 'no-store');
-    return res.status(200).json({ matches });
-  } catch (err) {
-    console.error('[matches]', err);
-    return res.status(500).json({ error: 'Server error' });
   }
+
+  send(data);
+
+  // Poll signal every 1s
+  let lastSig = (await kv.get(`signal:${matchId}`)) || '0';
+  let alive   = true;
+  res.on('close', () => { alive = false; });
+
+  const iv = setInterval(async () => {
+    if (!alive) { clearInterval(iv); return; }
+    try {
+      const sig = await kv.get(`signal:${matchId}`);
+      if (sig && sig !== lastSig) {
+        lastSig = sig;
+        const d = await kv.get(`match:${matchId}`);
+        if (d) send(typeof d === 'string' ? JSON.parse(d) : d);
+      }
+    } catch {}
+  }, 1000);
+
+  // 23s এ close, client reconnect করবে
+  setTimeout(() => {
+    clearInterval(iv);
+    if (alive) { res.write('event: reconnect\ndata: {}\n\n'); res.end(); }
+  }, 23000);
 }
