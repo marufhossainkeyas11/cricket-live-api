@@ -257,12 +257,10 @@ initPWA();
 async function loadList() {
   try {
     const r = await fetch(`${API}/api/matches`);
-    if (!r.ok) { renderList([]); return; }
     const d = await r.json();
     renderList(d.matches || []);
-  } catch (e) {
-    const app = document.getElementById('app');
-    app.innerHTML = hdrH('', false) + `<div class="state"><div class="state-ico">🏏</div><div class="state-ttl">No matches</div><div class="state-sub">No active matches right now.</div></div>`;
+  } catch {
+    renderList([]);
   }
 }
 
@@ -281,20 +279,20 @@ function renderList(matches) {
   }
 
   html += `<div class="list-hd">Active Matches (${matches.length})</div>`;
-  matches.forEach(mc => {
-    const live = !mc.done && (Date.now() - mc.updatedAt < 20000);
-    html += `<a class="match-card" href="/match/${encodeURIComponent(mc.matchId)}">
+  matches.forEach(m => {
+    const live = !m.done && (Date.now() - m.updatedAt < 20000);
+    html += `<a class="match-card" href="/match/${encodeURIComponent(m.matchId)}">
       <div class="mc-top">
-        <span class="mc-teams">${esc(mc.teamA)} <span class="mc-vs">vs</span> ${esc(mc.teamB)}</span>
+        <span class="mc-teams">${esc(m.teamA)} <span class="mc-vs">vs</span> ${esc(m.teamB)}</span>
         <span>
           <span class="mc-badge ${live ? 'mc-live' : 'mc-end'}">${live ? 'LIVE' : 'ENDED'}</span>
-          ${mc.hasPassword ? '<span class="mc-badge mc-lock">🔒</span>' : ''}
+          ${m.hasPassword ? '<span class="mc-badge mc-lock">🔒</span>' : ''}
         </span>
       </div>
       <div class="mc-meta">
-        <span class="mc-score">${mc.score}</span>
-        <span>${mc.overs} ov · Inn ${mc.innings}</span>
-        <span class="mc-ago">${ago(mc.updatedAt)}</span>
+        <span class="mc-score">${m.score}</span>
+        <span>${m.overs} ov · Inn ${m.innings}</span>
+        <span class="mc-ago">${ago(m.updatedAt)}</span>
       </div>
     </a>`;
   });
@@ -305,52 +303,36 @@ function renderList(matches) {
 // ─────────────────────────────────────────────
 //  SSE CONNECT
 // ─────────────────────────────────────────────
-let reconnectTimer = null;
-let pollTimer = null;
-let pwVerified = false;
+function startConnect(pw) {
+  if (pw !== undefined) enteredPw = pw;
+  if (es) es.close();
 
-async function startConnect(pw) {
-  if (pw !== undefined && pw !== null) enteredPw = pw;
-  clearTimeout(pollTimer);
-  await fetchOnce();
-}
+  const url = `${API}/api/live?matchId=${encodeURIComponent(matchId)}${enteredPw ? '&password=' + encodeURIComponent(enteredPw) : ''}`;
+  es = new EventSource(url);
 
-async function fetchOnce() {
-  try {
-    const url = `${API}/api/score?matchId=${encodeURIComponent(matchId)}${enteredPw ? '&password=' + encodeURIComponent(enteredPw) : ''}`;
-    const r = await fetch(url);
-    
-    if (r.status === 404) { showNotFound(); return; }
-    if (r.status === 401) { showPasswordScreen(''); return; }
-    if (!r.ok) { scheduleNext(5000); return; }
-    
-    const d = await r.json();
-    if (d.error === 'password_required') { showPasswordScreen(''); return; }
-    
-    pwVerified = true;
+  es.onopen = () => { setPill(true); setMsg('Live stream connected'); };
+
+  es.onmessage = e => {
+    const d = JSON.parse(e.data);
+    if (d.error === 'not_found')        { showNotFound(); return; }
+    if (d.error === 'password_required') { showPasswordScreen(); return; }
     curData = d;
     render(d);
-    setPill(true);
     setBtmTime();
-    setMsg('Live · updates every 3s');
-    scheduleNext(d.match?.done ? 10000 : 3000);
-    
-  } catch {
-    setPill(false);
-    setMsg('Reconnecting…');
-    scheduleNext(5000);
-  }
+  };
+
+  es.addEventListener('reconnect', () => { es.close(); setTimeout(startConnect, 400); });
+
+  es.onerror = () => {
+    setPill(false); setMsg('Reconnecting…');
+    es.close(); setTimeout(startConnect, 3000);
+  };
 }
 
-function scheduleNext(ms) {
-  clearTimeout(pollTimer);
-  pollTimer = setTimeout(fetchOnce, ms);
-}
-  
 // ─────────────────────────────────────────────
 //  PASSWORD SCREEN
 // ─────────────────────────────────────────────
-function showPasswordScreen(errMsg) {
+function showPasswordScreen() {
   document.getElementById('app').innerHTML = hdrH('', false) + `
     <div class="state">
       <div class="pw-box">
@@ -358,7 +340,7 @@ function showPasswordScreen(errMsg) {
         <p>This match is password protected.</p>
         <input class="pw-inp" id="pwInp" type="password" placeholder="Enter password" onkeydown="if(event.key==='Enter')checkPw()"/>
         <button class="pw-btn" onclick="checkPw()">Watch Live</button>
-        <div class="pw-err" id="pwErr">${errMsg||''}</div>
+        <div class="pw-err" id="pwErr"></div>
       </div>
     </div>`;
   setTimeout(() => document.getElementById('pwInp')?.focus(), 100);
@@ -368,8 +350,6 @@ function checkPw() {
   const pw = document.getElementById('pwInp')?.value.trim();
   if (!pw) { document.getElementById('pwErr').textContent = 'Password দিন'; return; }
   document.getElementById('pwErr').textContent = 'Connecting…';
-  enteredPw = pw;
-  pwVerified = false;
   startConnect(pw);
 }
 
