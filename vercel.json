@@ -1,6 +1,7 @@
 {
   "rewrites": [
-    { "source": "/viewer", "destination": "/viewer.html" }
+    { "source": "/match/:id", "destination": "/viewer.html" },
+    { "source": "/",          "destination": "/viewer.html" }
   ],
   "headers": [
     {
