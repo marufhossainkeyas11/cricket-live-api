@@ -304,50 +304,38 @@ function renderList(matches) {
 //  SSE CONNECT
 // ─────────────────────────────────────────────
 let reconnectTimer = null;
-let pwMode = false;
-
 function startConnect(pw) {
   if (pw !== undefined && pw !== null) enteredPw = pw;
-  pwMode = false;
-  
-  if (es) { try { es.close(); } catch {} es = null; }
+  if (es) { es.close(); es = null; }
   clearTimeout(reconnectTimer);
 
   const url = `${API}/api/live?matchId=${encodeURIComponent(matchId)}${enteredPw ? '&password=' + encodeURIComponent(enteredPw) : ''}`;
-  
-  try { es = new EventSource(url); } catch { return; }
+  es = new EventSource(url);
 
-  es.onopen = () => { setPill(true); setMsg('Live'); };
+  es.onopen = () => { setPill(true); setMsg('Live stream connected'); };
 
   es.onmessage = e => {
-    try {
-      const d = JSON.parse(e.data);
-      if (d.error === 'not_found') {
-        try { es.close(); } catch {} es = null;
-        showNotFound(); return;
-      }
-      if (d.error === 'password_required') {
-        pwMode = true;
-        try { es.close(); } catch {} es = null;
-        showPasswordScreen(); return;
-      }
-      curData = d; render(d); setBtmTime();
-    } catch {}
+    const d = JSON.parse(e.data);
+    if (d.error === 'not_found')         { showNotFound(); es.close(); return; }
+    if (d.error === 'password_required') { es.close(); es = null; showPasswordScreen(); return; }
+    curData = d;
+    render(d);
+    setBtmTime();
   };
 
   es.addEventListener('reconnect', () => {
-    try { es.close(); } catch {} es = null;
-    if (!pwMode) reconnectTimer = setTimeout(() => startConnect(enteredPw), 500);
+    es.close(); es = null;
+    reconnectTimer = setTimeout(() => startConnect(enteredPw), 400);
   });
 
   es.onerror = () => {
-    if (pwMode) { try { es.close(); } catch {} es = null; return; }
+    if (!es) return;
     setPill(false); setMsg('Reconnecting…');
-    try { es.close(); } catch {} es = null;
+    es.close(); es = null;
     reconnectTimer = setTimeout(() => startConnect(enteredPw), 4000);
   };
 }
-
+  
 // ─────────────────────────────────────────────
 //  PASSWORD SCREEN
 // ─────────────────────────────────────────────
@@ -365,18 +353,10 @@ function showPasswordScreen() {
   setTimeout(() => document.getElementById('pwInp')?.focus(), 100);
 }
 
-async function checkPw() {
+function checkPw() {
   const pw = document.getElementById('pwInp')?.value.trim();
   if (!pw) { document.getElementById('pwErr').textContent = 'Password দিন'; return; }
-  const errEl = document.getElementById('pwErr');
-  errEl.style.color = 'var(--t2)';
-  errEl.textContent = 'Verifying…';
-  try {
-    const r = await fetch(`${API}/api/score?matchId=${encodeURIComponent(matchId)}&password=${encodeURIComponent(pw)}`);
-    if (r.status === 401) { errEl.style.color='var(--red)'; errEl.textContent='✗ Wrong password'; return; }
-    if (r.status === 404) { showNotFound(); return; }
-  } catch { errEl.textContent='Network error'; return; }
-  pwMode = false;
+  document.getElementById('pwErr').textContent = 'Connecting…';
   enteredPw = pw;
   startConnect(pw);
 }
