@@ -8,7 +8,12 @@
  * Match TTL: 6 ঘণ্টা (match শেষে auto-expire)
  */
 
-import { kv } from '@vercel/kv';
+
+import { Redis } from '@upstash/redis';
+const kv = new Redis({
+  url: process.env.LIVECS_KV_REST_API_URL,
+  token: process.env.LIVECS_KV_REST_API_TOKEN,
+});
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const MATCH_TTL_SEC  = 6 * 60 * 60;   // 6 ঘণ্টা
