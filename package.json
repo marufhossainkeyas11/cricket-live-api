@@ -1,0 +1,13 @@
+{
+  "name": "cricket-live-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cricket Score — Live API for Vercel",
+  "type": "module",
+  "dependencies": {
+    "@vercel/kv": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
