@@ -1,3 +1,5 @@
+
+
 # Cricket Live API — Setup Guide
 
 Cricket Score PWA থেকে Vercel-এ live score push করার সম্পূর্ণ guide।
@@ -19,23 +21,34 @@ cricket-live-api/
 
 ---
 
-## ধাপ ১ — Vercel KV তৈরি করুন
+## ধাপ ১ — Upstash Redis তৈরি করুন
 
-1. [vercel.com/dashboard](https://vercel.com/dashboard) → **Storage** → **Create Database**
-2. Type: **KV (Redis)**
-3. Region: **Singapore (sin1)** — বাংলাদেশের কাছে
-4. Database তৈরি হলে → **`.env.local`** ট্যাবে যান
-5. `.env.local` এ এই তিনটা variable থাকবে:
+1. [console.upstash.com](https://console.upstash.com) → **Create Database**
+2. Name: যেকোনো নাম দিন, যেমন `cricket-live`
+3. Region: **ap-southeast-1 (Singapore)** — বাংলাদেশের কাছে
+4. Database তৈরি হলে → **REST API** ট্যাবে যান
+5. এই দুটো value কপি করুন:
    ```
-   KV_URL=...
-   KV_REST_API_URL=...
-   KV_REST_API_TOKEN=...
+   UPSTASH_REDIS_REST_URL=...
+   UPSTASH_REDIS_REST_TOKEN=...
    ```
-   এগুলো Vercel project-এ automatically inject হয়।
 
 ---
 
-## ধাপ ২ — Vercel Deploy
+## ধাপ ২ — Vercel-এ Environment Variables সেট করুন
+
+Vercel Dashboard → আপনার project → **Settings → Environment Variables** → দুটো variable যোগ করুন:
+
+```
+LIVECS_KV_REST_API_URL    = (Upstash REST URL)
+LIVECS_KV_REST_API_TOKEN  = (Upstash REST Token)
+```
+
+> ⚠️ নাম হুবহু এভাবেই দিতে হবে — `LIVECS_` prefix সহ।
+
+---
+
+## ধাপ ৩ — Vercel Deploy
 
 ```bash
 # Terminal এ:
@@ -57,16 +70,6 @@ vercel
 
 Deploy হলে একটা URL পাবেন যেমন:
 `https://cricket-live-api-abc123.vercel.app`
-
----
-
-## ধাপ ৩ — KV Database link করুন
-
-```bash
-# Vercel Dashboard → আপনার project → Settings → Environment Variables
-# KV_URL, KV_REST_API_URL, KV_REST_API_TOKEN — তিনটাই আছে কিনা দেখুন
-# না থাকলে Storage → আপনার KV → Connect to Project
-```
 
 ---
 
@@ -139,11 +142,8 @@ GET /api/matches
 
 ## Free Tier সীমা
 
-| Service        | Free Limit      | যথেষ্ট? |
-|---------------|----------------|--------|
-| Vercel KV     | 30k req/day    | হ্যাঁ  |
-| Vercel KV     | 256MB storage  | হ্যাঁ  |
-| Vercel Functions | 100GB/month | হ্যাঁ  |
-
-5 সেকেন্ড polling × 50 দর্শক × 3 ঘণ্টা = ~108,000 req — একটু বেশি হতে পারে।
-দর্শক বেশি হলে polling 10s করুন।
+| Service        | Free Limit         | যথেষ্ট? |
+|---------------|--------------------|--------|
+| Upstash Redis | 10,000 req/day     | সীমিত  |
+| Upstash Redis | 256MB storage      | হ্যাঁ  |
+| Vercel Functions | 100GB/month     | হ্যাঁ  |
