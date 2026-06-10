@@ -356,24 +356,49 @@ function scheduleNext() {
   }, POLL_MS);
 }
 
+let _failCount = 0;
+
 async function fetchAndRender() {
   const statusEl = document.getElementById('refreshStatus');
   if (statusEl) statusEl.textContent = 'Refreshing…';
 
   try {
-    const r = await fetch(`${API_BASE}/api/score?matchId=${encodeURIComponent(state.matchId)}&_=${Date.now()}`);
-    if (r.status === 404) { renderNotFound(); return; }
-    if (!r.ok)            { renderError('Server error ' + r.status); return; }
+    const r = await fetch(
+      `${API_BASE}/api/score?matchId=${encodeURIComponent(state.matchId)}&_=${Date.now()}`,
+      { cache: 'no-store' }
+    );
+
+    // ✅ 404 হলে polling বন্ধ করো না — match শুরু না হলেও দেখাও
+    if (r.status === 404) {
+      _failCount = 0;
+      if (statusEl) statusEl.textContent = 'Waiting for match to start…';
+      return;
+    }
+
+    // ✅ 429/5xx — চুপ থাকো, retry করো
+    if (!r.ok) {
+      _failCount++;
+      if (statusEl) statusEl.textContent = `Retrying… (${r.status})`;
+      return;
+    }
 
     const d = await r.json();
+    _failCount = 0;
     state.data = d;
     renderMatch(d);
 
     const stale = Date.now() - d.updatedAt > STALE_MS;
     updateLiveDot(!stale);
-    if (statusEl) statusEl.textContent = stale ? 'Score may be delayed' : 'Live · updates every 5s';
+    if (statusEl) statusEl.textContent = stale
+      ? 'Score may be delayed'
+      : 'Live · updates every 5s';
+
   } catch {
-    if (statusEl) statusEl.textContent = 'Connection error — retrying…';
+    // ✅ Network error — loop বন্ধ হবে না
+    _failCount++;
+    if (statusEl) statusEl.textContent = _failCount > 5
+      ? 'Connection lost — retrying…'
+      : 'Connection error — retrying…';
   }
 }
 
