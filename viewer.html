@@ -279,20 +279,20 @@ function renderList(matches) {
   }
 
   html += `<div class="list-hd">Active Matches (${matches.length})</div>`;
-  matches.forEach(m => {
-    const live = !m.done && (Date.now() - m.updatedAt < 20000);
-    html += `<a class="match-card" href="/match/${encodeURIComponent(m.matchId)}">
+  matches.forEach(mc => {
+    const live = !mc.done && (Date.now() - mc.updatedAt < 20000);
+    html += `<a class="match-card" href="/match/${encodeURIComponent(mc.matchId)}">
       <div class="mc-top">
-        <span class="mc-teams">${esc(m.teamA)} <span class="mc-vs">vs</span> ${esc(m.teamB)}</span>
+        <span class="mc-teams">${esc(mc.teamA)} <span class="mc-vs">vs</span> ${esc(mc.teamB)}</span>
         <span>
           <span class="mc-badge ${live ? 'mc-live' : 'mc-end'}">${live ? 'LIVE' : 'ENDED'}</span>
-          ${m.hasPassword ? '<span class="mc-badge mc-lock">🔒</span>' : ''}
+          ${mc.hasPassword ? '<span class="mc-badge mc-lock">🔒</span>' : ''}
         </span>
       </div>
       <div class="mc-meta">
-        <span class="mc-score">${m.score}</span>
-        <span>${m.overs} ov · Inn ${m.innings}</span>
-        <span class="mc-ago">${ago(m.updatedAt)}</span>
+        <span class="mc-score">${mc.score}</span>
+        <span>${mc.overs} ov · Inn ${mc.innings}</span>
+        <span class="mc-ago">${ago(mc.updatedAt)}</span>
       </div>
     </a>`;
   });
