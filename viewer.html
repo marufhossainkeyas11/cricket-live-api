@@ -257,10 +257,12 @@ initPWA();
 async function loadList() {
   try {
     const r = await fetch(`${API}/api/matches`);
+    if (!r.ok) { renderList([]); return; }
     const d = await r.json();
     renderList(d.matches || []);
-  } catch {
-    renderList([]);
+  } catch (e) {
+    const app = document.getElementById('app');
+    app.innerHTML = hdrH('', false) + `<div class="state"><div class="state-ico">🏏</div><div class="state-ttl">No matches</div><div class="state-sub">No active matches right now.</div></div>`;
   }
 }
 
@@ -304,11 +306,33 @@ function renderList(matches) {
 //  SSE CONNECT
 // ─────────────────────────────────────────────
 let reconnectTimer = null;
+let pwVerified = false;
+
 function startConnect(pw) {
   if (pw !== undefined && pw !== null) enteredPw = pw;
   if (es) { es.close(); es = null; }
   clearTimeout(reconnectTimer);
 
+  if (!pwVerified && enteredPw) {
+    verifyAndConnect();
+    return;
+  }
+  openSSE();
+}
+
+async function verifyAndConnect() {
+  try {
+    const r = await fetch(`${API}/api/score?matchId=${encodeURIComponent(matchId)}&password=${encodeURIComponent(enteredPw)}`);
+    if (r.status === 401) { showPasswordScreen('Wrong password'); return; }
+    if (r.status === 404) { showNotFound(); return; }
+    pwVerified = true;
+    openSSE();
+  } catch {
+    reconnectTimer = setTimeout(() => verifyAndConnect(), 3000);
+  }
+}
+
+function openSSE() {
   const url = `${API}/api/live?matchId=${encodeURIComponent(matchId)}${enteredPw ? '&password=' + encodeURIComponent(enteredPw) : ''}`;
   es = new EventSource(url);
 
@@ -316,8 +340,8 @@ function startConnect(pw) {
 
   es.onmessage = e => {
     const d = JSON.parse(e.data);
-    if (d.error === 'not_found')         { showNotFound(); es.close(); return; }
-    if (d.error === 'password_required') { es.close(); es = null; showPasswordScreen(); return; }
+    if (d.error === 'not_found')         { showNotFound(); es.close(); es = null; return; }
+    if (d.error === 'password_required') { es.close(); es = null; pwVerified = false; showPasswordScreen(''); return; }
     curData = d;
     render(d);
     setBtmTime();
@@ -325,21 +349,21 @@ function startConnect(pw) {
 
   es.addEventListener('reconnect', () => {
     es.close(); es = null;
-    reconnectTimer = setTimeout(() => startConnect(enteredPw), 400);
+    reconnectTimer = setTimeout(() => openSSE(), 400);
   });
 
   es.onerror = () => {
     if (!es) return;
     setPill(false); setMsg('Reconnecting…');
     es.close(); es = null;
-    reconnectTimer = setTimeout(() => startConnect(enteredPw), 4000);
+    reconnectTimer = setTimeout(() => openSSE(), 4000);
   };
 }
   
 // ─────────────────────────────────────────────
 //  PASSWORD SCREEN
 // ─────────────────────────────────────────────
-function showPasswordScreen() {
+function showPasswordScreen(errMsg) {
   document.getElementById('app').innerHTML = hdrH('', false) + `
     <div class="state">
       <div class="pw-box">
@@ -347,7 +371,7 @@ function showPasswordScreen() {
         <p>This match is password protected.</p>
         <input class="pw-inp" id="pwInp" type="password" placeholder="Enter password" onkeydown="if(event.key==='Enter')checkPw()"/>
         <button class="pw-btn" onclick="checkPw()">Watch Live</button>
-        <div class="pw-err" id="pwErr"></div>
+        <div class="pw-err" id="pwErr">${errMsg||''}</div>
       </div>
     </div>`;
   setTimeout(() => document.getElementById('pwInp')?.focus(), 100);
@@ -355,11 +379,12 @@ function showPasswordScreen() {
 
 function checkPw() {
   const pw = document.getElementById('pwInp')?.value.trim();
-  if (!pw) { document.getElementById('pwErr').textContent = 'Password দিন'; return; }
-  document.getElementById('pwErr').textContent = 'Connecting…';
+  if (!pw) { document.getElementById('pwErr').textContent = 'Inter Right Password'; return; }
+  document.getElementById('pwErr').textContent = 'Verifying…';
+  pwVerified = false;
   enteredPw = pw;
-  startConnect(pw);
-}
+  verifyAndConnect();
+  }
 
 // ─────────────────────────────────────────────
 //  RENDER MATCH
