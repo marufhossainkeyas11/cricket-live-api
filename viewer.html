@@ -305,7 +305,9 @@ function renderList(matches) {
 // ─────────────────────────────────────────────
 function startConnect(pw) {
   if (pw !== undefined && pw !== null) enteredPw = pw;
-  if (es) es.close();
+  if (es) { es.close(); es = null; }
+  clearTimeout(reconnectTimer);
+
   const url = `${API}/api/live?matchId=${encodeURIComponent(matchId)}${enteredPw ? '&password=' + encodeURIComponent(enteredPw) : ''}`;
   es = new EventSource(url);
 
@@ -313,22 +315,23 @@ function startConnect(pw) {
 
   es.onmessage = e => {
     const d = JSON.parse(e.data);
-    if (d.error === 'not_found')        { showNotFound(); return; }
-    if (d.error === 'password_required') { showPasswordScreen(); return; }
+    if (d.error === 'not_found')         { showNotFound(); es.close(); return; }
+    if (d.error === 'password_required') { es.close(); es = null; showPasswordScreen(); return; }
     curData = d;
     render(d);
     setBtmTime();
   };
 
   es.addEventListener('reconnect', () => {
-    es.close();
-    setTimeout(() => startConnect(enteredPw), 400);
+    es.close(); es = null;
+    reconnectTimer = setTimeout(() => startConnect(enteredPw), 400);
   });
-  
+
   es.onerror = () => {
+    if (!es) return;
     setPill(false); setMsg('Reconnecting…');
-    es.close();
-    setTimeout(() => startConnect(enteredPw), 3000);
+    es.close(); es = null;
+    reconnectTimer = setTimeout(() => startConnect(enteredPw), 4000);
   };
 }
 
@@ -351,8 +354,9 @@ function showPasswordScreen() {
 
 function checkPw() {
   const pw = document.getElementById('pwInp')?.value.trim();
-  if (!pw) { document.getElementById('pwErr').textContent = 'Password দিন'; return; }
+  if (!pw) { document.getElementById('pwErr').textContent = 'Enter rigt Password'; return; }
   document.getElementById('pwErr').textContent = 'Connecting…';
+  enteredPw = pw;
   startConnect(pw);
 }
 
