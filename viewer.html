@@ -306,58 +306,45 @@ function renderList(matches) {
 //  SSE CONNECT
 // ─────────────────────────────────────────────
 let reconnectTimer = null;
+let pollTimer = null;
 let pwVerified = false;
 
-function startConnect(pw) {
+async function startConnect(pw) {
   if (pw !== undefined && pw !== null) enteredPw = pw;
-  if (es) { es.close(); es = null; }
-  clearTimeout(reconnectTimer);
-
-  if (!pwVerified && enteredPw) {
-    verifyAndConnect();
-    return;
-  }
-  openSSE();
+  clearTimeout(pollTimer);
+  await fetchOnce();
 }
 
-async function verifyAndConnect() {
+async function fetchOnce() {
   try {
-    const r = await fetch(`${API}/api/score?matchId=${encodeURIComponent(matchId)}&password=${encodeURIComponent(enteredPw)}`);
-    if (r.status === 401) { showPasswordScreen('Wrong password'); return; }
+    const url = `${API}/api/score?matchId=${encodeURIComponent(matchId)}${enteredPw ? '&password=' + encodeURIComponent(enteredPw) : ''}`;
+    const r = await fetch(url);
+    
     if (r.status === 404) { showNotFound(); return; }
+    if (r.status === 401) { showPasswordScreen(''); return; }
+    if (!r.ok) { scheduleNext(5000); return; }
+    
+    const d = await r.json();
+    if (d.error === 'password_required') { showPasswordScreen(''); return; }
+    
     pwVerified = true;
-    openSSE();
-  } catch {
-    reconnectTimer = setTimeout(() => verifyAndConnect(), 3000);
-  }
-}
-
-function openSSE() {
-  const url = `${API}/api/live?matchId=${encodeURIComponent(matchId)}${enteredPw ? '&password=' + encodeURIComponent(enteredPw) : ''}`;
-  es = new EventSource(url);
-
-  es.onopen = () => { setPill(true); setMsg('Live stream connected'); };
-
-  es.onmessage = e => {
-    const d = JSON.parse(e.data);
-    if (d.error === 'not_found')         { showNotFound(); es.close(); es = null; return; }
-    if (d.error === 'password_required') { es.close(); es = null; pwVerified = false; showPasswordScreen(''); return; }
     curData = d;
     render(d);
+    setPill(true);
     setBtmTime();
-  };
+    setMsg('Live · updates every 3s');
+    scheduleNext(d.match?.done ? 10000 : 3000);
+    
+  } catch {
+    setPill(false);
+    setMsg('Reconnecting…');
+    scheduleNext(5000);
+  }
+}
 
-  es.addEventListener('reconnect', () => {
-    es.close(); es = null;
-    reconnectTimer = setTimeout(() => openSSE(), 400);
-  });
-
-  es.onerror = () => {
-    if (!es) return;
-    setPill(false); setMsg('Reconnecting…');
-    es.close(); es = null;
-    reconnectTimer = setTimeout(() => openSSE(), 4000);
-  };
+function scheduleNext(ms) {
+  clearTimeout(pollTimer);
+  pollTimer = setTimeout(fetchOnce, ms);
 }
   
 // ─────────────────────────────────────────────
@@ -379,12 +366,12 @@ function showPasswordScreen(errMsg) {
 
 function checkPw() {
   const pw = document.getElementById('pwInp')?.value.trim();
-  if (!pw) { document.getElementById('pwErr').textContent = 'Inter Right Password'; return; }
-  document.getElementById('pwErr').textContent = 'Verifying…';
-  pwVerified = false;
+  if (!pw) { document.getElementById('pwErr').textContent = 'Password দিন'; return; }
+  document.getElementById('pwErr').textContent = 'Connecting…';
   enteredPw = pw;
-  verifyAndConnect();
-  }
+  pwVerified = false;
+  startConnect(pw);
+}
 
 // ─────────────────────────────────────────────
 //  RENDER MATCH
