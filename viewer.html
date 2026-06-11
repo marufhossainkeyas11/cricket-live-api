@@ -321,11 +321,16 @@ function startConnect(pw) {
     setBtmTime();
   };
 
-  es.addEventListener('reconnect', () => { es.close(); setTimeout(startConnect, 400); });
-
+  es.addEventListener('reconnect', () => {
+    es.close();
+    setTimeout(() => startConnect(enteredPw), 400);
+  });
+  
   es.onerror = () => {
+    if (document.getElementById('pwInp')) return;
     setPill(false); setMsg('Reconnecting…');
-    es.close(); setTimeout(startConnect, 3000);
+    es.close();
+    setTimeout(() => startConnect(enteredPw), 4000);
   };
 }
 
@@ -348,7 +353,7 @@ function showPasswordScreen() {
 
 function checkPw() {
   const pw = document.getElementById('pwInp')?.value.trim();
-  if (!pw) { document.getElementById('pwErr').textContent = 'Password দিন'; return; }
+  if (!pw) { document.getElementById('pwErr').textContent = 'Enter the right password.'; return; }
   document.getElementById('pwErr').textContent = 'Connecting…';
   startConnect(pw);
 }
