@@ -399,7 +399,7 @@ function render(d) {
     <div class="sb-meta">
       <div class="smi"><div class="sml">Overs</div><div class="smv">${ov}.${bl}</div></div>
       <div class="smi"><div class="sml">${mt.innings===2?'RRR':'CRR'}</div><div class="smv">${rrr||crr}</div></div>
-      <div class="smi"><div class="sml">Format</div><div class="smv">${s.overs}T</div></div>
+      <div class="smi"><div class="sml">Format</div><div class="smv">${s.overs}Over</div></div>
       ${inn1?`<div class="smi"><div class="sml">Target</div><div class="smv" style="color:var(--ylw)">${inn1.runs+1}</div></div>`:''}
     </div>
     <div class="sb-bar"><div class="sb-fill" style="width:${Math.min(mt.balls/(s.overs*6)*100,100)}%"></div></div>
