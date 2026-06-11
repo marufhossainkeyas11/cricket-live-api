@@ -73,7 +73,7 @@ async function handlePost(req, res) {
     await kv.set(listKey, updated, { ex: MATCH_TTL });
   } else {
     await kv.expire(tokenKey, MATCH_TTL);
-    await kv.expire(passKey,  MATCH_TTL);
+    await kv.set(passKey, String(password || ''), { ex: MATCH_TTL });
   }
 
   // Save match data
