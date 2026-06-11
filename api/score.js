@@ -105,7 +105,9 @@ async function handleGet(req, res) {
   // Password check
   if (data.hasPassword) {
     const stored = await kv.get(`pass:${matchId}`);
-    if (!password || stored !== password)
+    const storedStr = String(stored || '').trim();
+    const inputStr  = String(password || '').trim();
+    if (!inputStr || storedStr !== inputStr)
       return res.status(401).json({ error: 'password_required' });
   }
 
