@@ -36,9 +36,12 @@ export default async function handler(req, res) {
   // Password check
   if (data.hasPassword) {
     const stored = await kv.get(`pass:${matchId}`);
-    if (!password || stored !== password) {
-      send({ error: 'password_required' });
-      return res.end();
+    const storedStr = String(stored || '').trim();
+    const inputStr  = String(password || '').trim();
+      if (!inputStr || storedStr !== inputStr) {
+        send({ error: 'password_required' });
+        return res.end();
+      }
     }
   }
 
