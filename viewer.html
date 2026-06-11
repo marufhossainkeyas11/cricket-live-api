@@ -304,7 +304,8 @@ function showPasswordScreen(err) {
 
 async function checkPw() {
   const pw = document.getElementById('pwInp')?.value.trim();
-  if (!pw) { document.getElementById('pwErr').textContent = 'Password দিন'; return; }
+  if (!pw) { document.getElementById('pwErr').textContent = 'Enter the right password'; return; }
+  if (!matchId) { document.getElementById('pwErr').textContent = 'Invalid match link'; return; }  
   document.getElementById('pwErr').textContent = 'Checking…';
 
   try {
