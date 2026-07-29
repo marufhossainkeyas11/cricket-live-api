@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Worker Source Fetcher</title>
+<style>
+  :root {
+    --bg: #1a1a1a;
+    --panel: #232323;
+    --border: #3a3a3a;
+    --text: #e8e8e8;
+    --muted: #999;
+    --accent: #f6821f; /* Cloudflare orange */
+    --error: #ff6b6b;
+    --ok: #4ade80;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, Roboto, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 16px;
+  }
+  h1 {
+    font-size: 18px;
+    margin: 0 0 4px;
+    color: var(--text);
+  }
+  p.sub {
+    color: var(--muted);
+    font-size: 13px;
+    margin: 0 0 20px;
+    line-height: 1.5;
+  }
+  .field {
+    margin-bottom: 12px;
+  }
+  label {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  input[type="text"], input[type="password"] {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 15px;
+  }
+  input:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+  button {
+    width: 100%;
+    padding: 12px;
+    background: var(--accent);
+    border: none;
+    border-radius: 6px;
+    color: #1a1a1a;
+    font-weight: 600;
+    font-size: 15px;
+    margin-top: 8px;
+  }
+  button:active { opacity: 0.85; }
+  button:disabled { opacity: 0.5; }
+  .status {
+    margin-top: 12px;
+    font-size: 13px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    display: none;
+  }
+  .status.show { display: block; }
+  .status.error { background: rgba(255,107,107,0.12); color: var(--error); border: 1px solid rgba(255,107,107,0.3); }
+  .status.ok { background: rgba(74,222,128,0.12); color: var(--ok); border: 1px solid rgba(74,222,128,0.3); }
+  .result {
+    margin-top: 16px;
+    display: none;
+  }
+  .result.show { display: block; }
+  .result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+  .result-header span { font-size: 12px; color: var(--muted); }
+  .copy-btn {
+    width: auto;
+    padding: 6px 14px;
+    font-size: 13px;
+    margin-top: 0;
+  }
+  textarea {
+    width: 100%;
+    height: 50vh;
+    background: #111;
+    color: #ccc;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    font-family: "JetBrains Mono", "Courier New", monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre;
+  }
+  details {
+    margin-top: 16px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  summary { cursor: pointer; }
+  details p { line-height: 1.6; }
+  code {
+    background: var(--panel);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Worker Source Fetcher</h1>
+<p class="sub">Cloudflare API দিয়ে deployed worker এর raw code সরাসরি টেনে আনে — dashboard editor বাদ দিয়ে।</p>
+
+<div class="field">
+  <label for="accountId">Account ID</label>
+  <input type="text" id="accountId" placeholder="Cloudflare dashboard → Workers & Pages এর sidebar এ পাবে">
+</div>
+
+<div class="field">
+  <label for="apiToken">API Token (বা Global API Key)</label>
+  <input type="password" id="apiToken" placeholder="My Profile → API Tokens">
+</div>
+
+<div class="field">
+  <label for="authEmail">Email (শুধু Global API Key ব্যবহার করলে লাগবে, Token হলে খালি রাখো)</label>
+  <input type="text" id="authEmail" placeholder="your@email.com">
+</div>
+
+<div class="field">
+  <label for="scriptName">Worker Script Name</label>
+  <input type="text" id="scriptName" placeholder="যেমন: toffee-proxy">
+</div>
+
+<button id="fetchBtn" onclick="fetchSource()">Source টেনে আনো</button>
+
+<div class="status" id="status"></div>
+
+<div class="result" id="result">
+  <div class="result-header">
+    <span id="charCount"></span>
+    <button class="copy-btn" onclick="copyAll()">সব কপি করো</button>
+  </div>
+  <textarea id="output" readonly></textarea>
+</div>
+
+<details>
+  <summary>API Token কীভাবে বানাবো?</summary>
+  <p>
+    Cloudflare dashboard → উপরে ডানদিকে প্রোফাইল আইকন → <strong>My Profile</strong> → <strong>API Tokens</strong> → <strong>Create Token</strong> → 
+    <strong>"Edit Cloudflare Workers"</strong> টেমপ্লেট বেছে নাও → Account permission এ তোমার account সিলেক্ট করে → Continue → Create Token।
+    তৈরি হওয়া টোকেনটা এখানে বসাও (Email এর দরকার নেই এই ক্ষেত্রে)।
+  </p>
+  <p>
+    বিকল্প হিসেবে Global API Key ব্যবহার করলে (My Profile → API Tokens → Global API Key → View) সাথে তোমার Cloudflare login email ও দিতে হবে।
+  </p>
+</details>
+
+<script>
+async function fetchSource() {
+  const accountId = document.getElementById('accountId').value.trim();
+  const apiToken = document.getElementById('apiToken').value.trim();
+  const authEmail = document.getElementById('authEmail').value.trim();
+  const scriptName = document.getElementById('scriptName').value.trim();
+  const statusEl = document.getElementById('status');
+  const resultEl = document.getElementById('result');
+  const outputEl = document.getElementById('output');
+  const btn = document.getElementById('fetchBtn');
+
+  statusEl.className = 'status';
+  resultEl.className = 'result';
+
+  if (!accountId || !apiToken || !scriptName) {
+    statusEl.textContent = 'Account ID, API Token, আর Script Name — এই তিনটাই লাগবে।';
+    statusEl.className = 'status error show';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'আনা হচ্ছে...';
+
+  const url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/workers/scripts/${encodeURIComponent(scriptName)}`;
+
+  const headers = {};
+  if (authEmail) {
+    headers['X-Auth-Email'] = authEmail;
+    headers['X-Auth-Key'] = apiToken;
+  } else {
+    headers['Authorization'] = `Bearer ${apiToken}`;
+  }
+
+  try {
+    const res = await fetch(url, { method: 'GET', headers });
+
+    if (!res.ok) {
+      let detail = '';
+      try {
+        const j = await res.json();
+        detail = j.errors ? j.errors.map(e => e.message).join(', ') : JSON.stringify(j);
+      } catch (e) {
+        detail = await res.text();
+      }
+      throw new Error(`HTTP ${res.status}: ${detail}`);
+    }
+
+    const text = await res.text();
+
+    outputEl.value = text;
+    document.getElementById('charCount').textContent = `${text.length.toLocaleString()} characters`;
+    resultEl.className = 'result show';
+
+    statusEl.textContent = 'সফলভাবে code পাওয়া গেছে। নিচে দেখো।';
+    statusEl.className = 'status ok show';
+  } catch (err) {
+    statusEl.textContent = 'সমস্যা হয়েছে: ' + err.message;
+    statusEl.className = 'status error show';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Source টেনে আনো';
+  }
+}
+
+function copyAll() {
+  const outputEl = document.getElementById('output');
+  outputEl.select();
+  outputEl.setSelectionRange(0, outputEl.value.length);
+  try {
+    document.execCommand('copy');
+  } catch (e) {}
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(outputEl.value).catch(() => {});
+  }
+  const statusEl = document.getElementById('status');
+  statusEl.textContent = 'ক্লিপবোর্ডে কপি হয়েছে।';
+  statusEl.className = 'status ok show';
+}
+</script>
+
+</body>
+</html>
